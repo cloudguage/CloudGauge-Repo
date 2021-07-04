@@ -1,0 +1,450 @@
+<!-- Styles -->
+<style>
+#piearea {
+width: 100%;
+height: 500px;
+}
+#radararea {
+width: 100%;
+height: 250px;
+}
+
+#stackedarea {
+width: 100%;
+height: 250px;
+}
+</style>
+
+<!-- Resources -->
+<link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css">
+<script src="https://cdn.amcharts.com/lib/4/core.js"></script>
+<script src="https://cdn.amcharts.com/lib/4/charts.js"></script>
+<script src="https://cdn.amcharts.com/lib/4/maps.js"></script>
+<script src="https://cdn.amcharts.com/lib/4/geodata/continentsLow.js"></script>
+<script src="https://cdn.amcharts.com/lib/4/themes/kelly.js"></script>
+<script src="https://cdn.amcharts.com/lib/4/themes/animated.js"></script>
+
+<!-- Chart code -->
+<script>
+    am4core.ready(function () {
+
+        // Themes begin
+        am4core.useTheme(am4themes_kelly);
+        am4core.useTheme(am4themes_animated);
+        // Themes end
+
+        // Create map instance
+        var chart = am4core.create("piearea", am4maps.MapChart);
+
+        // Set map definition
+        chart.geodata = am4geodata_continentsLow;
+
+        // Set projection
+        chart.projection = new am4maps.projections.Miller();
+
+        // Create map polygon series
+        var polygonSeries = chart.series.push(new am4maps.MapPolygonSeries());
+        polygonSeries.exclude = ["antarctica"];
+        polygonSeries.useGeodata = true;
+
+        // Create an image series that will hold pie charts
+        var pieSeries = chart.series.push(new am4maps.MapImageSeries());
+
+
+        var pieTemplate = pieSeries.mapImages.template;
+        pieTemplate.propertyFields.latitude = "latitude";
+        pieTemplate.propertyFields.longitude = "longitude";
+
+        var pieChartTemplate = pieTemplate.createChild(am4charts.PieChart);
+        pieChartTemplate.adapter.add("data", function (data, target) {
+            if (target.dataItem) {
+                return target.dataItem.dataContext.pieData;
+            }
+            else {
+                return [];
+            }
+        });
+        pieChartTemplate.propertyFields.width = "width";
+        pieChartTemplate.propertyFields.height = "height";
+        pieChartTemplate.horizontalCenter = "middle";
+        pieChartTemplate.verticalCenter = "middle";
+
+        var pieTitle = pieChartTemplate.titles.create();
+        pieTitle.text = "{title}";
+
+        var pieSeriesTemplate = pieChartTemplate.series.push(new am4charts.PieSeries);
+        pieSeriesTemplate.dataFields.category = "category";
+        pieSeriesTemplate.dataFields.value = "value";
+        pieSeriesTemplate.labels.template.disabled = true;
+        pieSeriesTemplate.ticks.template.disabled = true;
+
+        pieSeries.data = [{
+      "title": "West Central US",
+      "latitude": 39.55435,
+      "longitude":-110.03677,
+      "width": 5,
+      "height": 5,
+      "pieData": [{
+        "category": "Highly Performant",
+        "value": "##West Central US-HIGHLY PERFORMANT##"
+      },
+      {
+        "category": "Average Performant",
+        "value": "##West Central US-AVERAGE PERFORMANT##"
+      },
+      {
+        "category": "Bad Performant",
+        "value": "##West Central US-BAD PERFORMANT##"
+      }]
+    },  {
+      "title": "Canada",
+      "latitude": 60.130366,
+      "longitude":-95.346771,
+      "width": 5,
+      "height": 5,
+      "pieData": [{
+        "category": "Highly Performant",
+        "value": "##Canada East-HIGHLY PERFORMANT##"
+      },
+      {
+        "category": "Average Performant",
+        "value": "##Canada East-AVERAGE PERFORMANT##"
+      },
+      {
+        "category": "Bad Performant",
+        "value": "##Canada East-BAD PERFORMANT##"
+      }]
+    },
+     {
+      "title": "UK",
+      "latitude":54.560886,
+      "longitude":-2.2125118,
+      "width": 5,
+      "height": 5,
+      "pieData": [{
+        "category": "Highly Performant",
+        "value": "##UK West-HIGHLY PERFORMANT##"
+      },
+      {
+        "category": "Average Performant",
+        "value": "##UK West-AVERAGE PERFORMANT##"
+      },
+      {
+        "category": "Bad Performant",
+        "value": "##UK West-BAD PERFORMANT##"
+      }]
+    },
+   
+   
+   
+    {
+      "title": "India",
+     "latitude": 20.5937,
+            "longitude": 78.9629,
+      "width": 5,
+      "height": 5,
+      "pieData": [{
+        "category": "Highly Performant",
+        "value": "##South India-HIGHLY PERFORMANT##"
+      },
+      {
+        "category": "Average Performant",
+        "value": "##South India-AVERAGE PERFORMANT##"
+      },
+      {
+        "category": "Bad Performant",
+        "value": "##South India-BAD PERFORMANT##"
+      }]
+    },
+   
+ 
+   
+   
+   
+    {
+      "title": "China",
+      "latitude":47.212106,
+      "longitude":103.183594,
+      "width": 5,
+      "height": 5,
+      "pieData": [{
+        "category": "Highly Performant",
+        "value": "##China North-HIGHLY PERFORMANT##"
+      },
+      {
+        "category": "Average Performant",
+        "value": "##China North-AVERAGE PERFORMANT##"
+      },
+      {
+        "category": "Bad Performant",
+        "value": "##China North-BAD PERFORMANT##"
+      }]
+    },
+ 
+     
+    {
+      "title": "Japan",
+      "latitude": 36.204824,
+       "longitude": 138.252924,
+      "width": 5,
+      "height": 5,
+      "pieData": [{
+        "category": "Highly Performant",
+        "value": "##Japan West-HIGHLY PERFORMANT##"
+      },
+      {
+        "category": "Average Performant",
+        "value": "##Japan West-AVERAGE PERFORMANT##"
+      },
+      {
+        "category": "Bad Performant",
+        "value": "##Japan West-BAD PERFORMANT##"
+      }]
+    },
+    {
+      "title": "Korea",
+        "latitude": 40.3399,
+            "longitude": 125.5101,
+      "width": 5,
+      "height": 5,
+      "pieData": [{
+        "category": "Highly Performant",
+        "value": "##Korea South-HIGHLY PERFORMANT##"
+      },
+      {
+        "category": "Average Performant",
+        "value": "##Korea South-AVERAGE PERFORMANT##"
+      },
+      {
+        "category": "Bad Performant",
+        "value": "##Korea South-BAD PERFORMANT##"
+      }]
+    },
+    {
+      "title": "Australia",
+      "latitude":-24.7761086,
+      "longitude":145.755,
+      "width": 5,
+      "height":5,
+      "pieData": [{
+        "category": "Highly Performant",
+        "value": "##Australia Central-HIGHLY PERFORMANT##"
+      },
+      {
+        "category": "Average Performant",
+        "value": "##Australia Central-AVERAGE PERFORMANT##"
+      },
+      {
+        "category": "Bad Performant",
+        "value": "##Australia Central-BAD PERFORMANT##"
+      }]
+    },
+   
+     {
+      "title": "Australia",
+      "latitude": -28.7761086,
+      "longitude":132.755,
+      "width": 5,
+      "height": 5,
+      "pieData": [{
+        "category": "Highly Performant",
+        "value": "##Australia SouthEast-HIGHLY PERFORMANT##"
+      },
+      {
+        "category": "Average Performant",
+        "value": "##Australia SouthEast-AVERAGE PERFORMANT##"
+      },
+      {
+        "category": "Bad Performant",
+        "value": "##Australia SouthEast-BAD PERFORMANT##"
+      }]
+    }];
+ 
+    }); // end am4core.ready()
+</script>
+<script>
+    am4core.ready(function () {
+
+        // Themes begin
+        am4core.useTheme(am4themes_kelly);
+        am4core.useTheme(am4themes_animated);
+        // Themes end
+
+        var chart = am4core.create("radararea", am4charts.RadarChart);
+        chart.hiddenState.properties.opacity = 0; // this creates initial fade-in
+        chart.innerRadius = am4core.percent(50);
+        chart.startAngle = -80;
+        chart.endAngle = 260;
+
+        chart.data = [
+            {
+                AppService: "Functions",
+                AvgAccessSeconds: $$functionpasscount
+            },
+            {
+                AppService: "WebApps",
+                AvgAccessSeconds: $$webappspasscount
+            },
+            {
+                AppService: "Large DB",
+                AvgAccessSeconds: $$largedbpasscount
+            },
+            {
+                AppService: "NoSQL DB",
+                AvgAccessSeconds: $$nosqldbpasscount
+            },
+            {
+                AppService: "Micro DB",
+                AvgAccessSeconds: $$microdbpasscount
+            }
+        ];
+
+        var categoryAxis = chart.xAxes.push(new am4charts.CategoryAxis());
+        categoryAxis.renderer.grid.template.location = 0;
+        categoryAxis.dataFields.category = "AppService";
+        categoryAxis.renderer.labels.template.location = 0.3;
+        categoryAxis.renderer.grid.template.strokeOpacity = 0.08;
+        categoryAxis.renderer.tooltipLocation = 0.5;
+        categoryAxis.tooltip.disabled = true;
+        categoryAxis.renderer.labels.template.bent = true;
+        categoryAxis.renderer.labels.template.padding(0, 0, 0, 0);
+        categoryAxis.renderer.labels.template.radius = 7;
+
+        var valueAxis = chart.yAxes.push(new am4charts.ValueAxis());
+        valueAxis.min = 0;
+        valueAxis.max = 15;
+        valueAxis.strictMinMax = true;
+        valueAxis.renderer.minGridDistance = 30;
+        valueAxis.renderer.grid.template.strokeOpacity = 0.08;
+        valueAxis.tooltip.disabled = true;
+
+        // axis break
+        var axisBreak = valueAxis.axisBreaks.create();
+        axisBreak.startValue = 2100;
+        axisBreak.endValue = 22900;
+        axisBreak.breakSize = 0.02;
+
+        // make break expand on hover
+        var hoverState = axisBreak.states.create("hover");
+        hoverState.properties.breakSize = 1;
+        hoverState.properties.opacity = 0.1;
+        hoverState.transitionDuration = 1500;
+
+        axisBreak.defaultState.transitionDuration = 1000;
+
+        var series = chart.series.push(new am4charts.RadarColumnSeries());
+        series.dataFields.categoryX = "AppService";
+        series.dataFields.valueY = "AvgAccessSeconds";
+        series.columns.template.tooltipText = "{valueY.value}";
+        series.columns.template.tooltipY = 0;
+        series.columns.template.strokeOpacity = 0;
+
+        chart.seriesContainer.zIndex = -1;
+
+        // as by default columns of the same series are of the same color, we add adapter which takes colors from chart.colors color set
+        series.columns.template.adapter.add("fill", function (fill, target) {
+            return chart.colors.getIndex(target.dataItem.index);
+        });
+
+        let cursor = new am4charts.RadarCursor();
+        cursor.innerRadius = am4core.percent(50);
+        cursor.lineY.disabled = true;
+
+        cursor.xAxis = categoryAxis;
+        chart.cursor = cursor;
+
+    }); // end am4core.ready()
+</script>
+<script>
+    am4core.ready(function () {
+
+        // Themes begin
+        am4core.useTheme(am4themes_animated);
+        // Themes end
+
+        // Create chart instance
+        var chart = am4core.create("stackedarea", am4charts.XYChart);
+
+
+        // Add data
+        chart.data = [{
+            category: 'Functions',
+            first: $$functionpasscount,
+            second: $$functionfailcount
+        },
+        {
+            category: 'WebApps',
+            first: $$webappspasscount,
+            second: $$webappsfailcount
+        },
+        {
+            category: 'Large DB',
+            first: $$largedbpasscount,
+            second: $$largedbfailcount
+        },
+        {
+            category: 'NoSQL DB',
+            first: $$nosqldbpasscount,
+            second: $$nosqldbfailcount
+        },
+        {
+            category: 'Micro DB',
+            first: $$microdbpasscount,
+            second: $$microdbfailcount
+        }];
+
+        // Create axes
+        var categoryAxis = chart.xAxes.push(new am4charts.CategoryAxis());
+        categoryAxis.dataFields.category = "category";
+        categoryAxis.renderer.grid.template.location = 0;
+
+
+        var valueAxis = chart.yAxes.push(new am4charts.ValueAxis());
+        valueAxis.renderer.inside = true;
+        valueAxis.renderer.labels.template.disabled = true;
+        valueAxis.min = 0;
+
+        // Create series
+        function createSeries(field, name, colour) {
+
+            // Set up series
+            var series = chart.series.push(new am4charts.ColumnSeries());
+            series.name = name;
+            series.dataFields.valueY = field;
+            series.dataFields.categoryX = "category";
+            series.sequencedInterpolation = true;
+            series.fill = colour;
+            // Make it stacked
+            series.stacked = true;
+
+            // Configure columns
+            series.columns.template.width = am4core.percent(60);
+            series.columns.template.tooltipText = "[bold]{name}[/]\n[font-size:14px]{categoryX}: {valueY}";
+
+            // Add label
+            var labelBullet = series.bullets.push(new am4charts.LabelBullet());
+            labelBullet.label.text = "{valueY}";
+            labelBullet.locationY = 0.5;
+            labelBullet.label.hideOversized = true;
+
+            return series;
+        }
+
+        createSeries("first", "Pass", "green");
+        createSeries("second", "Fail", "red");
+
+        // Legend
+        chart.legend = new am4charts.Legend();
+
+    });
+</script>
+<!-- HTML -->
+<div class="row">
+<div class="pull-left" style="width:70%;border-style:dotted;height:90%;overflow:auto;">
+<div id="piearea"></div>
+</div>
+<div class="pull-right" style="width:30%;height:90%;padding-left:20px;">
+<div class="row"><div id="radararea"></div></div>
+<div class="row"><div id="stackedarea"></div></div>
+</div>
+</div>

@@ -1,0 +1,15 @@
+from google.cloud import bigquery
+import pandas as pd
+import os
+PATH = os.path.join(r'#SERVICE_ACCOUNT_KEY_PATH#','GCloudServiceAccountKey.json')
+os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = PATH
+gcp_project="#PROJECT_NAME#"
+bq_dataset="#DATASET_NAME#"
+table_name="#TABLE_NAME#"
+client=bigquery.Client()
+limit="#LIMIT#"
+result=client.query("SELECT * FROM "+gcp_project+"."+bq_dataset+"."+table_name+" LIMIT "+limit)
+df=pd.DataFrame(result)
+for row_dict in df.to_dict(orient='records'):
+    print(row_dict)
+        

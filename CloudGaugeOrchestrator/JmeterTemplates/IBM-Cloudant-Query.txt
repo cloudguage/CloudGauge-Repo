@@ -1,0 +1,16 @@
+import  cloudant
+from cloudant import Cloudant
+from cloudant.client import Cloudant
+from cloudant.result import Result, ResultByKey
+try:
+    username="#USER_NAME#"
+    password="#PASSWORD#"
+    host="#HOST_NAME#"
+    url="https://"+host.split('.')[0]+".cloudant.com"
+    ibm_cloudant_connection_client = Cloudant(username, password, url=url,connect=True)
+    database_client = ibm_cloudant_connection_client['#DB_NAME#']
+    response=database_client.all_docs(limit=#LIMIT#)
+    for item in response['rows']:
+        print(item)
+except Exception as e:
+    print(e)

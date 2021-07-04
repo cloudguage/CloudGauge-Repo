@@ -1,0 +1,17 @@
+import boto3
+access="#ACCESS_KEY#"
+secret="#SECRET_ACCESS_KEY#"
+client =boto3.client('dynamodb','#REGION#',aws_access_key_id=access,aws_secret_access_key=secret)
+from boto3.dynamodb.conditions import Key
+dynamodb = boto3.resource('dynamodb')
+table = dynamodb.Table('#TABLE_NAME#')
+response = table.scan()
+count=len(response['Items'])
+limit=#LIMIT#
+if count>=limit:
+    no_of_docs=limit
+else:
+    no_of_docs=count
+result = response['Items']
+for item in range(0,no_of_docs):
+    print(result[item])

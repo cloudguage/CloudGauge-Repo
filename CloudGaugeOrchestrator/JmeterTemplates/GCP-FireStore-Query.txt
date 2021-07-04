@@ -1,0 +1,22 @@
+import firebase_admin
+from firebase_admin import credentials
+from firebase_admin import firestore  
+import google.cloud.storage
+
+try:
+    if not firebase_admin._apps:
+        cred = credentials.Certificate(r'#SERVICE_ACCOUNT_KEY_PATH#')
+        app = firebase_admin.initialize_app(cred)
+    collection_name="#COLLECTION_NAME#"
+    db = firestore.client()
+    users_ref = db.collection(collection_name)
+    docs=users_ref.stream()
+    limit=#LIMIT#
+    i=0
+    for doc in docs:
+        if i>=limit:
+            break
+        print(doc.to_dict())
+        i+=1
+except Exception as e:
+    print(e)

@@ -1,0 +1,8 @@
+import pymongo
+from pymongo import MongoClient
+azure_mongodb_url ="#CONNECTION_STRING#"
+azure_mongodb_client_object = pymongo.MongoClient(azure_mongodb_url)
+azure_mongodb_database_object = azure_mongodb_client_object.#DB_NAME#
+collection_object = azure_mongodb_database_object['#COLLECTION_NAME#']
+for document in collection_object.find().limit(#LIMIT#):
+    print(document)
