@@ -4,13 +4,6 @@ import os
 import time
 from subprocess import Popen
 from subprocess import PIPE
-from google.auth.transport import Response
-import gspread
-import pandas as pd
-from oauth2client.service_account import ServiceAccountCredentials
-from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseDownload
-from google.oauth2 import service_account
 import io
 import json
 import shutil
@@ -54,25 +47,8 @@ def run_jmeter(params):
         print(e)
         log_error(params,"Failed to run jmeter")
         return
-
-
-def update_sheet(params):
-    #Function to Update the output sheet of Runs instance
-    #result_list parameter contains ReportFile url and PassOrFail status
-    #params dictionary contains key value pairs of single test case from Test Cases sheet
-    #output sheet contains all the columns of Test cases sheet in addition to ReportFile and PassOrFail columns
-    try:
-        #Reading columns of Test Cases output sheet
-        ouput_sheet_df=read_spreadsheet_to_df(credentials,instance_sheet_id,"Test Cases Output")
-        data_list=[]
-        if params['IsScope']=="Yes":
-            for column in list(ouput_sheet_df.columns):
-                data_list.append(params[column])
-            append_row_to_sheet(credentials,instance_sheet_id,"Test Cases Output",data_list)
-            print("Sheet Updated")
-    except Exception as e:
-        log_error(params,"Failed to update sheet")
-
+    
+    
 def execute_performance(params):
     #Function to execute performance of a test case
     #Step1: create a duplicate file of master jmx
@@ -129,51 +105,8 @@ def run_command(command):
         return decoded_output
 
 
-def get_duplicate_file_name(params,extension=".jmx"):
-#Function to return duplicate file name-(copy of master Jmx files and python scripts)
-    file_name=params['ConfigType']+"-"+params['InstanceHead']+"-"+datetime.datetime.now().strftime("%d%b%YHHMM%H%M")+extension
-    #Jmeter results in error if file name contains space.
-    file_name=file_name.replace(' ','')
-    return file_name
 
-def change_file_extension(input_file,extension):
-    #Function to change file extension for python scripts.
-    #Initial python script will be of .txt format, after updating the required config details, converting .txt to .py and feding to jmeter.
-    this_file = input_file
-    base = os.path.splitext(this_file)[0]
-    os.rename(this_file, base + extension)
 
-def get_current_timestamp():
-    return "-"+time.strftime("%d-%b-%Y-%Hh-%Mm-%Ss")
-
-def update_run_log(start_time,end_time):
-    #Function to update run log after running the instance.
-    print("In Runlog")
-    try:
-        temp_time=start_time
-        start_time=start_time.time().strftime("%H:%M:%S")
-        end_time=end_time.time().strftime("%H:%M:%S")
-        output="https://docs.google.com/spreadsheets/d/"+instance_sheet_id
-        output_error="https://docs.google.com/spreadsheets/d/"+errors_sheet_id
-        #To Do: Reports
-        #Make report as JmeterLogs and Output as Test cases Output
-        time_taken=str(datetime.datetime.strptime(end_time,'%H:%M:%S') - datetime.datetime.strptime(start_time,'%H:%M:%S'))
-        start_time = temp_time.strftime("%d/%m/%Y %H:%M:%S")
-        data_list=[start_time,time_taken,output,"NA",output_error]
-        append_row_to_sheet(credentials,run_log_sheet_id,"Sheet1",data_list)
-    except Exception as e:
-        print(e)
-
-def log_error(params,err_msg):
-    #Function to log erros in errors folder
-    #Contains timestamp, first five columns from Test cases sheet and error message
-    row_index=get_last_row_index(credentials,errors_sheet_id,"Sheet1")
-    if row_index==0:
-        col_names=['TimeStamp','ConnectionProfile','IsScope','ConfigType','InstanceHead','Error']
-        append_row_to_sheet(credentials,errors_sheet_id,"Sheet1",col_names)
-    ct = str(datetime.datetime.now()).split(' ')[1]
-    data_list=[ct,params['ConnectionProfile'],params['IsScope'],params['ConfigType'],params['InstanceHead'],err_msg]
-    append_row_to_sheet(credentials,errors_sheet_id,"Sheet1",data_list)
 
 #Azure Cloud Resources
 
@@ -181,6 +114,7 @@ def azure_function_execute(params):
     download_file_from_parent_folder(credentials,jmeter_resources_folder_id,params['JmxFile'])
     try:
         az_function_command="az functionapp list"
+        #Execute CLI command on the Cloud to retrieve meta data of the App Service
         json_file=run_command(az_function_command)
         #InstanceHead: FunctionAppName
         for val in json_file:
@@ -199,6 +133,7 @@ def azure_function_execute(params):
                 params['sampler_path']="api/"+params['InstanceDetail']
                 params['Location']=val['location']
                 params['duplicate_file_name']=get_duplicate_file_name(params)
+                #Now, since we have all the data execute JMeter Template and capture the parallel running results
                 res=execute_performance(params)
                 return res
         #if FunctionAPP not found or is not in runnig state
@@ -209,68 +144,11 @@ def azure_function_execute(params):
         return 0
 
 
-def cosmosdb_python_update(params):
-    #Function to update python script with test case configuration
-    #Step1:Taking initial python script which is a text file, creating a new file with required configuration
-    #Step2:Change the extension from .txt to .py
-    download_file_from_parent_folder(credentials,jmeter_resources_folder_id,"Azure-CosmosDB-Query.txt")
-    try:
-        python_file=open("Azure-CosmosDB-Query.txt","r")
-        data=python_file.read()
-        python_file.close()
-        new_data1=data.replace("#CONNECTION_STRING#",params['ConnectionString'])
-        new_data2=new_data1.replace("#DB_NAME#",params['InstanceHead'])
-        new_data3=new_data2.replace("#COLLECTION_NAME#",params['InstanceDetail'])
-        document_limit=0
-        if params['Parameter1']:
-            document_limit=eval(params['Parameter1'])['DocumentLimit']
-        new_data4=new_data3.replace("#LIMIT#",str(document_limit))
-        #Creating a duplicate of Master python script file in jmeter examples folder
-        new_script_name=get_duplicate_file_name(params,".txt")
-        python_file2=open(params['jmeter_bin_path']+"/examples/"+new_script_name,"w")
-        python_file2.write(new_data4)
-        python_file2.close()
-        params['new_script_name']=new_script_name.replace(".txt",".py")
-        change_file_extension(params['jmeter_bin_path']+"/examples/"+new_script_name,".py")
-    except Exception as e:
-        print(e)
-        log_error(params,"Error while updating Azure-CosmosDB-Query.txt python script")
-
-
-def azure_cosmosdb_query(params):
-    download_file_from_parent_folder(credentials,jmeter_resources_folder_id,params['JmxFile'])
-    try:
-        if params['ConnectionString']=='':
-            if params['AccountName'] and params['ResourceGroup']:
-                #If InstanceHead is of format account.db
-                if params['InstanceHead'].__contains__('.'):
-                    params['InstanceHead']=params['InstanceHead'].split('.')[1]
-                cosmosdb_command="az cosmosdb keys list --name "+params['AccountName']+" --resource-group "+params['ResourceGroup']+" --type connection-strings"
-                json_file=run_command(cosmosdb_command)
-                if json_file:
-                    params['ConnectionString']=json_file['connectionStrings'][0]['connectionString']
-                else:
-                    log_error(params,"ResourceNotFound or invalid Connection/TestCase input given.")
-                    return 0
-            else:
-                log_error(params,"Required connection parameters missing.")
-                return 0
-        az_cosmosdb_show="az cosmosdb show --resource-group "+params['ResourceGroup']+" --name "+params['AccountName']
-        az_cosmosdb_show_op=run_command(az_cosmosdb_show)
-        params['Location']=az_cosmosdb_show_op['location']
-        params['duplicate_file_name']=get_duplicate_file_name(params)
-        cosmosdb_python_update(params)
-        res=execute_performance(params)
-        return res
-    except Exception as e:
-        log_error(params,"An Error Occured: "+str(e))
-        return 0
-
-
 def azure_webapp_connect(params):
     download_file_from_parent_folder(credentials,jmeter_resources_folder_id,params['JmxFile'])
     try:
         command="az webapp list"
+        #Execute CLI command on the Cloud to retrieve meta data of the App Service
         json_file=run_command(command)
         for val in json_file:
             if val['name']==params['InstanceHead']:
@@ -282,6 +160,7 @@ def azure_webapp_connect(params):
                     params['sampler_path']=landing_page
                 params['Location']=val['location']
                 params['duplicate_file_name']=get_duplicate_file_name(params)
+                #Now, since we have all the data execute JMeter Template and capture the parallel running results
                 res=execute_performance(params)
                 return res
         log_error(params,"Web app not found or not in running state.")
@@ -290,7 +169,6 @@ def azure_webapp_connect(params):
         log_error(params,"An Error Occured: "+str(e))
         return 0
     
-
 def azure_sqldb_query(params):
     #Dowloading the master jmx file
     download_file_from_parent_folder(credentials,jmeter_resources_folder_id,params['JmxFile'])
@@ -301,6 +179,7 @@ def azure_sqldb_query(params):
                 if params['InstanceHead'].__contains__('.'):
                     params['InstanceHead']=params['InstanceHead'].split('.')[1]
                 sql_conn_str_command="az sql db show-connection-string  --client jdbc --server "+params['ServerName']+" --name "+params['InstanceHead']
+                #Execute CLI command on the Cloud to retrieve meta data of the App Service
                 command_output=run_command(sql_conn_str_command)
                 if command_output:
                     params['ConnectionString']=command_output
@@ -324,15 +203,14 @@ def azure_sqldb_query(params):
         params['Location']=az_show_command_op['location']
         params['query']="select TOP("+str(records_limit)+") * from "+params['InstanceDetail']
         params['duplicate_file_name']=get_duplicate_file_name(params)
+        #Now, since we have all the data execute JMeter Template and capture the parallel running results
         res=execute_performance(params)
         return res
     except Exception as e:
         log_error(params,"An Error Occured: "+str(e))
         return 0
 
-
-
-
+#GCP
 def firestore_python_update(params):
     #Function to update python script with test case configuration
     #Step1:Taking initial python script which is a text file, creating a new file with required configuration
@@ -367,6 +245,7 @@ def gcp_firestore_query(params):
             params['service_account_key_path']=os.getcwd()+"\GCloudServiceAccountKey.json"
             params['duplicate_file_name']=get_duplicate_file_name(params)
             firestore_python_update(params)
+            #Now, since we have all the data execute JMeter Template and capture the parallel running results
             res=execute_performance(params)
             return res
         else:
@@ -376,93 +255,7 @@ def gcp_firestore_query(params):
         log_error(params,"An Error Occured: "+str(e))
 
 
-def bigquery_python_update(params):
-    download_file_from_parent_folder(credentials,jmeter_resources_folder_id,"GCP-BigQuery-Query.txt")
-    try:
-        python_file=open("GCP-BigQuery-Query.txt","r")
-        data=python_file.read()
-        python_file.close()
-        new_data1=data.replace("#SERVICE_ACCOUNT_KEY_PATH#",params['service_account_key_path'])
-        new_data2=new_data1.replace("#DATASET_NAME#",params['InstanceHead'])
-        new_data3=new_data2.replace("#TABLE_NAME#",params['InstanceDetail'])
-        #default records limit: 100
-        records_limit=100
-        project_name=""
-        if params['Parameter1']:    
-            project_name=eval(params['Parameter1'])['ProjectName']
-        if params['Parameter2']:    
-            records_limit=eval(params['Parameter2'])['RecordsLimit']
-        new_data4=new_data3.replace("#PROJECT_NAME#",project_name)
-        new_data5=new_data4.replace("#LIMIT#",str(records_limit))
-        new_script_name="GCP-BigQuery-Query-"+str(time.strftime("%d%b%Y-%Hh-%Mm"))+".txt"
-        python_file2=open(params['jmeter_bin_path']+"/examples/"+new_script_name,"w")
-        python_file2.write(new_data5)
-        python_file2.close()
-        params['new_script_name']=new_script_name.replace(".txt",".py")
-        change_file_extension(params['jmeter_bin_path']+"/examples/"+new_script_name,".py")
-    except Exception as e:
-        log_error(params,"An Error Occured: "+str(e))
 
-
-def gcp_bigquery_query(params):
-    download_file_from_parent_folder(credentials,jmeter_resources_folder_id,params['JmxFile'])
-    try:
-        #ServiAccountKey should be present in CWD
-        if os.path.exists("GCloudServiceAccountKey.json"):
-            params['service_account_key_path']=os.getcwd()
-            params['duplicate_file_name']=get_duplicate_file_name(params)
-            bigquery_python_update(params)
-            res=execute_performance(params)
-            return res
-        else:
-            log_error(params,"No service account key found")
-            return 0
-    except Exception as e:
-        log_error(params,"An Error Occured: "+str(e))
-        return 0
-
-
-def gcp_function_execute(params):
-    download_file_from_parent_folder(credentials,jmeter_resources_folder_id,params['JmxFile'])
-    try:
-        function_command="gcloud functions list --format json"
-        json_file=run_command(function_command)
-        for val in json_file:
-            name=val['name'].split('/')
-            if params['InstanceHead']==name[-1]:
-                params['sampler_domain']=name[3]+"-"+name[1]+".cloudfunctions.net"
-                params['sampler_path']=name[-1]
-                #Parameter1: CSVFIle
-                if params['Parameter1']:
-                    csv_file=eval(params['Parameter1'])['CsvFileName']
-                    download_status=download_file_from_parent_folder(credentials,parameter_files_folder_id,csv_file)
-                    if download_status:
-                        params['filename']=os.getcwd()+"\\"+csv_file
-                    else:
-                        log_error(params,"Failed to download the parameter file")
-                        return 0
-                params['duplicate_file_name']=get_duplicate_file_name(params)
-                res=execute_performance(params)
-                return res
-    except Exception as e:
-        log_error(params,"An Error Occured: "+str(e))
-        return 0
-
-
-def gcp_webapp_connect(params):
-    download_file_from_parent_folder(credentials,jmeter_resources_folder_id,params['JmxFile'])
-    try:
-        webapp_command="gcloud config get-value project"
-        project_id=run_command(webapp_command)
-        params['sampler_path']=project_id+"/"+params['InstanceHead']
-        params['duplicate_file_name']=get_duplicate_file_name(params)
-        res=execute_performance(params)
-        return res
-    except Exception as e:
-        log_error(params,"An Error Occured: "+str(e))
-        return 0
-    
-    
  #AWS
  
 def aws_rds_query(params):
@@ -476,84 +269,20 @@ def aws_rds_query(params):
             records_limit=eval(params['Parameter1'])['RecordsLimit']
         params['query']="select * from "+params['InstanceDetail']+" LIMIT "+str(records_limit)+";"
         params['duplicate_file_name']=get_duplicate_file_name(params)
+        #Now, since we have all the data execute JMeter Template and capture the parallel running results
         res=execute_performance(params)
         return res
     except Exception as e:
         log_error(params,"An Error Occured: "+str(e))
         return 0
 
-def dynamo_python_update(params):
-    #Function to update python script with test case configuration
-    #Step1:Taking initial python script which is a text file, creating a new file with required configuration
-    #Step2:Change the extension from .txt to .py
-    download_file_from_parent_folder(credentials,jmeter_resources_folder_id,"AWS-DynamoDB-Query.txt")
-    try:
-        python_file=open("AWS-DynamoDB-Query.txt","r")
-        data=python_file.read()
-        python_file.close()
-        new_data1=data.replace("#ACCESS_KEY#",params['access_key'])
-        new_data2=new_data1.replace("#SECRET_ACCESS_KEY#",params['secret_access_key'])
-        new_data3=new_data2.replace("#TABLE_NAME#",params['InstanceHead'])
-        if params['Parameter1']:    
-            records_limit=eval(params['Parameter1'])['RecordsLimit']
-        new_data4=new_data3.replace("#LIMIT#",str(records_limit))
-        new_data5=new_data4.replace("#REGION#",params['region'])
-        new_script_name="AWS-DynamoDB-Query-"+str(time.strftime("%d%b%Y-%Hh-%Mm"))+".txt"
-        python_file2=open(params['jmeter_bin_path']+"/examples/"+new_script_name,"w")
-        python_file2.write(new_data5)
-        python_file2.close()
-        params['new_script_name']=new_script_name.replace(".txt",".py")
-        change_file_extension(params['jmeter_bin_path']+"/examples/"+new_script_name,".py")
-    except Exception as e:
-        log_error(params,"Error updating python script")
 
-
-def aws_dynamodb_query(params):
-    download_file_from_parent_folder(credentials,jmeter_resources_folder_id,params['JmxFile'])
-    try:
-        command1="aws configure get region"
-        params['region']=run_command(command1).strip()
-        command2="aws configure get aws_access_key_id"
-        params['access_key']=run_command(command2).strip()
-        command3="aws configure get aws_secret_access_key"
-        params['secret_access_key']=run_command(command3).strip()
-        params['duplicate_file_name']=get_duplicate_file_name(params)
-        dynamo_python_update(params)
-        res=execute_performance(params)
-        return res
-    except Exception as e:
-        log_error(params,"An Error Occured: "+str(e))
-        return 0
-        
-        
-def aws_webapp_connect(params):
-    download_file_from_parent_folder(credentials,jmeter_resources_folder_id,params['JmxFile'])
-    try:
-        command="aws amplify list-apps"
-        json_file=run_command(command)
-        for val in json_file['apps']:
-            if params['InstanceHead']==val['name']:
-                params['app_id']=val['appId']
-        #Parameter1: Branch name
-        if params['Parameter1']:
-            branch=eval(params['Parameter1'])['BranchName']
-        params['sampler_domain']=branch+"."+params['app_id']+".amplifyapp.com"
-        if params['Parameter2']:
-                    #Parameter2 : String representation of dictionary ex:{"LandingPage":"Home/Index"}
-                    landing_page=eval(params['Parameter2'])['LandingPage']
-                    params['sampler_path']=landing_page
-        params['duplicate_file_name']=get_duplicate_file_name(params)
-        res=execute_performance(params)
-        return res
-    except Exception as e:
-        log_error(params,"An Error Occured: "+str(e))    
-        return 0
-
-
+#IBM
 def ibm_db2_query(params):
     download_file_from_parent_folder(credentials,jmeter_resources_folder_id,params['JmxFile'])
     try:
         command="ibmcloud resource service-key "+"\""+params['ServiceKeyName']+"\""+" --output json"
+        #Execute CLI command on the Cloud to retrieve meta data of the App Service
         json_file=run_command(command)
         params['ConnectionString']=json_file[0]['credentials']['jdbcurl']
         params['user_name']=json_file[0]['credentials']['username']
@@ -562,6 +291,7 @@ def ibm_db2_query(params):
             records_limit=eval(params['Parameter1'])['RecordsLimit']
         params['query']="select * from "+params['InstanceHead']+" LIMIT "+str(records_limit)
         params['duplicate_file_name']=get_duplicate_file_name(params)
+        #Now, since we have all the data execute JMeter Template and capture the parallel running results
         res=execute_performance(params)
         return res
     except Exception as e:
@@ -569,90 +299,6 @@ def ibm_db2_query(params):
         return 0
         
         
-def cloudant_python_update(params):
-    #Function to update python script with test case configuration
-    #Step1:Taking initial python script which is a text file, creating a new file with required configuration
-    #Step2:Change the extension from .txt to .py
-    download_file_from_parent_folder(credentials,jmeter_resources_folder_id,"IBM-Cloudant-Query.txt")
-    try:
-        python_file=open("IBM-Cloudant-Query.txt","r")
-        data=python_file.read()
-        python_file.close()
-        new_data1=data.replace("#USER_NAME#",params['user_name'])
-        new_data2=new_data1.replace("#PASSWORD#",params['password'])
-        new_data3=new_data2.replace("#HOST#",params['host'])
-        new_data4=new_data3.replace("#DB_NAME#",str(params['InstanceHead']))
-        if params['Parameter1']:    
-            records_limit=eval(params['Parameter1'])['RecordsLimit']
-        new_data5=new_data4.replace("#LIMIT#",str(records_limit))
-        new_script_name="IBM-Cloudant-Query-"+str(time.strftime("%d%b%Y-%Hh-%Mm"))+".txt"
-        python_file2=open(params['jmeter_bin_path']+"/examples/"+new_script_name,"w")
-        python_file2.write(new_data5)
-        python_file2.close()
-        params['new_script_name']=new_script_name.replace(".txt",".py")
-        change_file_extension(params['jmeter_bin_path']+"/examples/"+new_script_name,".py")
-    except Exception as e:
-        log_error(params,"An Error Occured: "+str(e))
-
-
-def ibm_cloudant_query(params):
-    download_file_from_parent_folder(credentials,jmeter_resources_folder_id,params['JmxFile'])
-    try:
-        command="ibmcloud resource service-key "+params['ServiceKeyName']+" --output json"
-        json_file=run_command(command)
-        params['user_name']=json_file[0]['credentials']['username']
-        params['password']=json_file[0]['credentials']['password']
-        params['host']=json_file[0]['credentials']['host']
-        params['duplicate_file_name']=get_duplicate_file_name(params)
-        cloudant_python_update(params)
-        res=execute_performance(params)
-        return res
-    except Exception as e:
-        log_error(params,"An Error Occured: "+str(e))
-        return 0
- 
-    
-def ibm_function_execute(params):
-    download_file_from_parent_folder(credentials,jmeter_resources_folder_id,params['JmxFile'])
-    try:
-        function_command1="ibmcloud target --cf"
-        function_status=run_command(function_command1)
-        function_command2="ibmcloud fn action get "+params['Instance']+" --url"
-        function_status2=run_command(function_command2)
-        function_status3=function_status2.split('\n')[1]
-        url=function_status3.replace('https://','')
-        params['sampler_domain']=url.split('/')[0]
-        params['sampler_path']='/'.join(url.split('/')[1:])
-        #Parameter1: CSVFile
-        if params['Parameter1']!='':
-            download_status=download_file_from_parent_folder(credentials,parameter_files_folder_id,params['Parameter1'])
-            if download_status:
-                params['filename']=os.getcwd()+"\\"+params['Parameter1']
-        params['duplicate_file_name']=get_duplicate_file_name(params)
-        execute_performance(params)
-    except Exception as e:
-        log_error(params,"An Error Occured: "+str(e))
-        
-def ibm_webapp_connect(params):
-    download_file_from_parent_folder(credentials,jmeter_resources_folder_id,params['JmxFile'])
-    try:
-        webapp_command="ibmcloud target --cf"
-        run_command(webapp_command)
-        webapp_command2="ibmcloud cf apps"
-        webapp_status=run_command(webapp_command2).split('\n')[6:-1]
-        for val in webapp_status:
-            if params['InstanceHead']==val.split(' ')[0]:
-                params['sampler_domain']=val.split(' ')[-1]
-                if params['Parameter1']:
-                    #Parameter1 : String representation of dictionary ex:{"LandingPage":"Home/Index"}
-                    landing_page=eval(params['Parameter1'])['LandingPage']
-                    params['sampler_path']=landing_page
-                params['duplicate_file_name']=get_duplicate_file_name(params)
-                res=execute_performance(params)
-                return res
-    except Exception as e:
-        log_error(params,"An Error Occured: "+str(e))
-        return 0
 
 def get_test_cases_params(df,index):
     params={}
@@ -708,104 +354,53 @@ def az_login(subscription_params):
         return 0
     
 def Orchestrator(subscription_name):
-    SCOPES = ['https://www.googleapis.com/auth/spreadsheets',
-          'https://www.googleapis.com/auth/drive.file',
-          'https://www.googleapis.com/auth/drive',
-          'https://www.googleapis.com/auth/drive.metadata']
     global credentials,instance_sheet_id,errors_sheet_id,run_log_sheet_id,master_configuration,parameter_files_folder_id,jmeter_resources_folder_id
     start_time =  datetime.datetime.now()
     try:
-        credentials=get_credentials(SCOPES)
-        master_configuration_list=list_files_by_name(credentials,"CloudGauge-Master-Configuration","application/vnd.google-apps.spreadsheet")
-        master_configuration=get_master_configuration(master_configuration_list,subscription_name)
-        central_credentials_sheet_id=get_central_credentails_file_id(credentials,master_configuration['id'])
-        runs_folder_id=get_file_id_for_master_file(credentials,master_configuration['id'],"Runs")
-        errors_folder_id=get_file_id_for_master_file(credentials,master_configuration['id'],"Errors")
-        run_log_sheet_id=get_file_id_for_master_file(credentials,master_configuration['id'],subscription_name+"-CloudGauge-RunLog")
-        parameter_files_folder_id=get_file_id_for_master_file(credentials,master_configuration['id'],"Parameters")
-        jmeter_resources_folder_id=get_file_id_for_master_file(credentials,master_configuration['id'],"JmeterTemplates")
-        #Flag for Devops
-        flag=''
-        if master_configuration is not None:
-            #instance_sheet_name='-'.join(master_configuration['name'].split('-')[0:2])+get_current_timestamp()
-            instance_sheet_name=get_snapshot_name(master_configuration['name'],datetime.datetime.now())
-            instance_sheet_id=copy_spreadsheet(credentials,master_configuration['id'],name=instance_sheet_name,parent_folder=runs_folder_id)
-            #Errors sheet name same as instance sheet
-            errors_sheet_name=get_snapshot_name(master_configuration['name'],datetime.datetime.now())
-            errors_sheet=create_new_spreadsheet(credentials,errors_sheet_name,errors_folder_id)
-            errors_sheet_id=errors_sheet['id']
-            if instance_sheet_id:
-                instance_sheet_range="Test Cases"
-                central_credentials_sheet_range="Sheet1"
-                #Reading Test Cases sheet from instance sheet and sheet1 from Central connections sheet
-                test_cases_df=read_spreadsheet_to_df(credentials, instance_sheet_id, instance_sheet_range)
-                central_credentials=read_credentials_to_dict(credentials,central_credentials_sheet_id,"Sheet1")
-                for index in test_cases_df.index:
-                    test_cases_params=get_test_cases_params(test_cases_df,index)
-                    #Getting credentials if any based on connectionfriendlyname
-                    central_connection_params=get_central_connections_params(central_credentials,test_cases_params)
-                    #Central credentials is required only for SQL and NoSQL Databases. For other resources parameters only from Test Cases Sheets is required.
-                    if central_connection_params:
-                        #Merging parameters from central connections sheet and test cases sheet and storing in params dict
-                        params={**test_cases_params,**central_connection_params}
-                    else:
-                        params=test_cases_params
-                    #Performance testing with multiple subscriptions only for azure cloud
-                    if params['IsScope']=="Yes":
-                        #subscription_params=get_subscription_params(central_credentials,test_cases_params)
-                        #login_status=az_login(subscription_params)
-                        #if login_status==0:
-                            #log_error(params,"Subscription login failed with given credentials or is disabled.")
-                            #continue
-                        #Azure
-                        if params['ConfigType']=="Azure-CosmosDB-Query":
-                            if not azure_cosmosdb_query(params):
-                                flag=0
-                        if params['ConfigType']=="Azure-Function-Execute":
-                            if not azure_function_execute(params):
-                                flag=0
-                        if params['ConfigType']=="Azure-WebApp-Connect":
-                            if not azure_webapp_connect(params):
-                                flag=0
-                        if params['ConfigType']=="Azure-SQLDB-Query":
-                            if not azure_sqldb_query(params):
-                                flag=0
-                        #GCP
-                        if params['ConfigType']=="GCP-BigQuery-Query" and params['IsScope']=="Yes":
-                            if not gcp_bigquery_query(params):
-                                flag=0
-                        if params['ConfigType']=="GCP-FireStore-Query" and params['IsScope']=="Yes":
-                            if not gcp_firestore_query(params):
-                                flag=0
-                        if params['ConfigType']=="GCP-Function-Execute" and params['IsScope']=="Yes":
-                            if not gcp_function_execute(params):
-                                flag=0
-                        if params['ConfigType']=="GCP-WebApp-Connect" and params['IsScope']=="Yes":
-                            if not gcp_webapp_connect(params):
-                                flag=0
-                        #AWS     
-                        if params['ConfigType']=="AWS-RDSPostgres-Query" and params['IsScope']=="Yes":
-                            if not aws_rds_query(params):
-                                flag=0
-                        if params['ConfigType']=="AWS-DynamoDB-Query" and params['IsScope']=="Yes":
-                            if not aws_dynamodb_query(params):
-                                flag=0
-                        if params['ConfigType']=="AWS-WebApp-Connect" and params['IsScope']=="Yes":
-                            if not aws_webapp_connect(params):
-                                flag=0
-                        #IBM   
-                        if params['ConfigType']=="IBM-DB2-Query" and params['IsScope']=="No":
-                            if not ibm_db2_query(params):
-                                flag=0
-                        if params['ConfigType']=="IBM-Cloudant-Query" and params['IsScope']=="Yes":
-                            if not ibm_cloudant_query(params):
-                                flag=0
-                        if params['ConfigType']=="IBM-WebApp-Connect" and params['IsScope']=="No":
-                            if not ibm_webapp_connect(params):
-                                flag=0
-                        
-                if flag!=0 and flag!='':
-                    flag=1  
+        instance_sheet_range="Test Cases"
+        central_credentials_sheet_range="Connections"
+        #Reading Test Cases sheet from instance sheet and sheet1 from Central connections sheet
+        test_cases_df=read_spreadsheet_to_df(credentials, instance_sheet_id, instance_sheet_range)
+        central_credentials=read_credentials_to_dict(credentials,central_credentials_sheet_id,"Sheet1")
+        for index in test_cases_df.index:
+            test_cases_params=get_test_cases_params(test_cases_df,index)
+            #Getting credentials if any based on connectionfriendlyname
+            central_connection_params=get_central_connections_params(central_credentials,test_cases_params)
+            #Central credentials is required only for SQL and NoSQL Databases. For other resources parameters only from Test Cases Sheets is required.
+            if central_connection_params:
+                #Merging parameters from central connections sheet and test cases sheet and storing in params dict
+                params={**test_cases_params,**central_connection_params}
+            else:
+                params=test_cases_params
+            #Performance testing with multiple subscriptions only for azure cloud
+            if params['IsScope']=="Yes":
+                #subscription_params=get_subscription_params(central_credentials,test_cases_params)
+                #login_status=az_login(subscription_params)
+                #if login_status==0:
+                    #log_error(params,"Subscription login failed with given credentials or is disabled.")
+                    #continue
+                #Azure
+
+                if params['ConfigType']=="Azure-Function-Execute":
+                    if not azure_function_execute(params):
+                        flag=0
+                if params['ConfigType']=="Azure-WebApp-Connect":
+                    if not azure_webapp_connect(params):
+                        flag
+                #GCP
+                if params['ConfigType']=="GCP-FireStore-Query" and params['IsScope']=="Yes":
+                    if not gcp_firestore_query(params):
+                        flag=0
+
+                #AWS     
+                if params['ConfigType']=="AWS-RDSPostgres-Query" and params['IsScope']=="Yes":
+                    if not aws_rds_query(params):
+                        flag=0
+                #IBM
+                if params['ConfigType']=="IBM-DB2-Query" and params['IsScope']=="No":
+                    if not ibm_db2_query(params):
+                        flag=0
+
         end_time =  datetime.datetime.now()
         update_run_log(start_time,end_time)
         return flag
